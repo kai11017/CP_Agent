@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from routers.users import router as users_router
+from database import engine, Base
 
 app = FastAPI()
+
+# This creates the actual .db file and tables
+Base.metadata.create_all(bind=engine)
 
 
 @app.get("/health")
