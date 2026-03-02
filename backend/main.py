@@ -4,6 +4,14 @@ from database import engine, Base
 
 app = FastAPI()
 
+@app.get("/")
+def read_root():
+    return {
+        "message": "Welcome to the CP_Agent Evaluation API!",
+        "status": "Online",
+        "docs": "Go to /docs to test the endpoints."
+    }
+
 # This creates the actual .db file and tables
 Base.metadata.create_all(bind=engine)
 

@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from typing import List, Optional
+from pydantic import BaseModel, EmailStr
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
@@ -49,8 +50,9 @@ class AddPlatformRequest(BaseModel): # client sends this to add a platform
 from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
-from .database import Base
+from database import Base
 
+# table for user database
 class DBUser(Base):
     __tablename__ = "users"
     userId = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
@@ -58,6 +60,7 @@ class DBUser(Base):
     email = Column(String, unique=True, index=True)
     createdAt = Column(DateTime)
 
+# table for submission database
 class DBSubmission(Base):
     __tablename__ = "submissions"
     submissionId = Column(Integer, primary_key=True)
@@ -66,3 +69,60 @@ class DBSubmission(Base):
     platform = Column(String)
     verdict = Column(String)
     submittedAt = Column(DateTime)
+
+# table for problem database solved by user
+class DBProblem(Base):
+    __tablename__ = "problems"
+    
+    # We use a String primary key because Codeforces uses IDs like "1520A"
+    problemId = Column(String, primary_key=True, index=True) 
+    platform = Column(String) # "codeforces"
+    name = Column(String)
+    rating = Column(Integer, default=0)
+    
+    # Storing tags (like "dp", "math") requires a JSON column in Postgres/SQLite
+    tags = Column(JSON, default=list) 
+
+
+# table for platform profiles
+class DBPlatformProfile(Base):
+    __tablename__ = "platform_profiles"
+    
+    profileId = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    # Links this profile to a specific user
+    userId = Column(String, ForeignKey("users.userId"), index=True)
+    platform = Column(String)  # "codeforces"
+    handle = Column(String, index=True)
+    currentRating = Column(Integer, default=0)
+    maxRating = Column(Integer, default=0)
+    lastSyncedAt = Column(DateTime, default=datetime.utcnow)
+    
+
+# for storing user skill vector and benchmark dataset
+from sqlalchemy import Float
+
+class DBUserSkill(Base):
+    """Stores the calculated skill vector for a specific user"""
+    __tablename__ = "user_skills"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    userId = Column(String, ForeignKey("users.userId"), index=True)
+    topic = Column(String, index=True) # e.g., "math", "dp", "graphs"
+    score = Column(Float, default=0.0)
+    lastUpdated = Column(DateTime, default=datetime.utcnow)
+
+class DBBenchmark(Base):
+    """Stores the standard dataset for each rating bucket"""
+    __tablename__ = "benchmarks"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    platform = Column(String) # "codeforces"
+    ratingBucket = Column(String, index=True) # e.g., "1400-1599"
+    topic = Column(String) # e.g., "dp"
+    
+    # Blueprint requirements: avg, p75, p90
+    avgScore = Column(Float, default=0.0) 
+    p75Score = Column(Float, default=0.0) # 75th percentile (Top 25%)
+    p90Score = Column(Float, default=0.0) # 90th percentile (Top 10%)
+    
+    lastComputed = Column(DateTime, default=datetime.utcnow)
