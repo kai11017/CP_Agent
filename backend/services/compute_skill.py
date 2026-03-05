@@ -1,86 +1,128 @@
-from sqlalchemy.orm import Session
+import math
 from collections import defaultdict
-from models import DBSubmission, DBProblem, DBUserSkill
 from datetime import datetime
+from sqlalchemy.orm import Session
+from models import DBSubmission, DBProblem, DBUserSkill
+
 
 def calculate_problem_weight(rating: int) -> float:
-    """
-    Uses an exponential curve to reward harder problems significantly more.
-    """
     if not rating or rating < 800:
-        rating = 800  # Baseline for unrated/very easy problems
-        
-    # Formula: (Rating / 1000)^3 * 20
-    return ((rating / 1000.0) ** 3) * 20.0
+        rating = 800
+    return ((rating / 1000.0) ** 2) * 20
+
+
+def calculate_recency_weight(submitted_at):
+    months = (datetime.utcnow() - submitted_at).days / 30
+    return math.exp(-0.05 * months)
+
+
+def calculate_attempt_penalty(attempts: int) -> float:
+    if attempts <= 1:
+        return 1.0
+    elif attempts == 2:
+        return 0.9
+    elif attempts == 3:
+        return 0.8
+    elif attempts == 4:
+        return 0.7
+    else:
+        return 0.6
+
 
 def calculate_diminishing_returns(scores: list) -> float:
-    """
-    Sorts scores high to low and applies diminishing weights
-    so solving 100 easy problems doesn't equal solving 1 hard problem.
-    """
     scores.sort(reverse=True)
-    total_score = 0.0
+    total = 0
     for i, score in enumerate(scores):
-        total_score += score * (0.9 ** i)  # Each subsequent problem gives 10% less value
-    return round(total_score, 2)
+        total += score * (0.9 ** i)
+    return round(total, 2)
 
-def compute_user_vector(user_id: str, db: Session) -> dict:
-    """
-    Calculates the user's skill vector using exponential weights and diminishing returns.
-    """
-    solved_records = (
+
+def compute_user_vector(user_id: str, db: Session):
+
+    submissions = (
         db.query(DBSubmission, DBProblem)
         .join(DBProblem, DBSubmission.problemId == DBProblem.problemId)
         .filter(DBSubmission.userId == user_id)
-        .filter(DBSubmission.verdict == "OK")
+        .order_by(DBSubmission.submittedAt)
         .all()
     )
 
-    # 1. Group problem scores by topic
+    problem_attempts = defaultdict(list)
+
+    for sub, prob in submissions:
+        problem_attempts[prob.problemId].append((sub, prob))
+
     topic_scores = defaultdict(list)
-    processed_problems = set()
 
-    for sub, prob in solved_records:
-        if prob.problemId in processed_problems:
+    solved_problem_count = 0
+
+    for problem_id, attempts_list in problem_attempts.items():
+
+        attempts = 0
+        first_ac_found = False
+        attempts_until_ac = None
+        latest_ac_time = None
+        prob = None
+
+        for sub, p in attempts_list:
+            attempts += 1
+            prob = p
+
+            if sub.verdict == "OK":
+
+                if not first_ac_found:
+                    attempts_until_ac = attempts
+                    first_ac_found = True
+
+                latest_ac_time = sub.submittedAt
+
+        if not first_ac_found:
             continue
-        processed_problems.add(prob.problemId)
 
-        # Calculate the base weight for this specific problem's rating
-        weight = calculate_problem_weight(prob.rating)
-        
-        # Contest Multiplier (from Blueprint, default 1.0 for now)
-        multiplier = 1.0 
-        final_problem_score = weight * multiplier
+        solved_problem_count += 1
+
+        difficulty_weight = calculate_problem_weight(prob.rating)
+        recency_weight = calculate_recency_weight(latest_ac_time)
+        attempt_penalty = calculate_attempt_penalty(attempts_until_ac)
+
+        problem_score = difficulty_weight * recency_weight * attempt_penalty
 
         tags = prob.tags if prob.tags else ["general"]
-        for tag in tags:
-            topic_scores[tag].append(final_problem_score)
 
-    # Calculate final scores with diminishing returns
+        score_per_tag = problem_score / len(tags)
+
+        for tag in tags:
+            topic_scores[tag].append(score_per_tag)
+
     final_skills = {}
+
     for tag, scores in topic_scores.items():
         final_skills[tag] = calculate_diminishing_returns(scores)
 
-    # Sort topics by score descending
-    sorted_skills = dict(sorted(final_skills.items(), key=lambda item: item[1], reverse=True))
+    sorted_skills = dict(sorted(final_skills.items(), key=lambda x: x[1], reverse=True))
 
     db.query(DBUserSkill).filter(DBUserSkill.userId == user_id).delete()
-        
+
     db_skills = []
+
     for tag, score in sorted_skills.items():
-        db_skills.append(DBUserSkill(
-            userId=user_id,
-            topic=tag,
-            score=score,
-            lastUpdated=datetime.utcnow()
-        ))
-    
+        db_skills.append(
+            DBUserSkill(
+                userId=user_id,
+                topic=tag,
+                score=score,
+                lastUpdated=datetime.utcnow()
+            )
+        )
+
     if db_skills:
         db.add_all(db_skills)
         db.commit()
-        
+
     return {
         "user_id": user_id,
-        "total_unique_solved": len(processed_problems),
+        "total_unique_solved": solved_problem_count,
         "skill_vector": sorted_skills
     }
+
+##used all submissions, added attempt penalty,added recency weigjhing,, the tag are given equal weightage 
