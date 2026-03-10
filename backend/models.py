@@ -4,6 +4,8 @@ from uuid import UUID
 from datetime import datetime
 from typing import Optional
 
+
+##furst part-pydantic , the api layer
 class Problem(BaseModel):
     problemId: str  
     platform: str
@@ -43,6 +45,14 @@ class PlatformProfile(BaseModel):  # users platform profile
 class AddPlatformRequest(BaseModel): # client sends this to add a platform
     platform: str
     handle: str
+
+
+
+
+
+
+
+
 
 
 # section for creating a database schema
@@ -126,3 +136,22 @@ class DBBenchmark(Base):
     p90Score = Column(Float, default=0.0) # 90th percentile (Top 10%)
     
     lastComputed = Column(DateTime, default=datetime.utcnow)
+
+
+class DBBenchmarkSample(Base):
+    """
+    Stores individual topic scores used to compute benchmark statistics.
+    Each user contributes only once.
+    """
+    __tablename__ = "benchmark_samples"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    userId = Column(String, index=True)  # user contributing this sample
+    ratingBucket = Column(String, index=True)
+
+    topic = Column(String, index=True)
+    score = Column(Float)
+
+    source = Column(String)  # "seed" or "user"
+    createdAt = Column(DateTime, default=datetime.utcnow)

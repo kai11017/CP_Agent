@@ -52,10 +52,10 @@ async def sync_codeforces_data(handle: str, user_id: str, db: Session) -> dict:
     # Get all submission IDs we ALREADY have in the database for this user
     existing_sub_ids = {
         sub.submissionId for sub in db.query(DBSubmission.submissionId)
-        .filter(DBSubmission.userId == user_id)
-        .all()
-    }
-
+        .filter(DBSubmission.userId == user_id)#where user id is userid
+        .all()##execute the query and return all resulys
+    } ##here sub is like(105,) so sub.submissionid returns 105,,
+  ##{} set coz set loookup is O(1) and lsit is O(n)
     new_submissions = []
     problems_to_upsert = {}
 
@@ -83,14 +83,14 @@ async def sync_codeforces_data(handle: str, user_id: str, db: Session) -> dict:
         # If the problem exists, it updates it. If not, it inserts it.
         db.merge(prob)
         
-    db.commit() # Commit problems first
+    db.commit() # Commit problems first,,
 
     # 5. Save New Submissions to Database
     for db_sub in new_submissions:
         db.merge(db_sub)
         
     # 6. Update the "lastSyncedAt" timestamp on the user's profile
-    profile = db.query(DBPlatformProfile).filter(DBPlatformProfile.handle == handle).first()
+    profile = db.query(DBPlatformProfile).filter(DBPlatformProfile.handle == handle).first()#return the first matchign row
     if profile:
         profile.lastSyncedAt = datetime.utcnow()
 
@@ -102,3 +102,6 @@ async def sync_codeforces_data(handle: str, user_id: str, db: Session) -> dict:
         "new_submissions_saved": len(new_submissions),
         "unique_problems_updated": len(problems_to_upsert)
     }
+
+## see a problem might be submitted 3 times , so for a problem id we need that only once , so we use this upsert in that batch we see if the problem is 3 times we store only once,, but submission if 3 submission were made we store it 3 times,, 
+

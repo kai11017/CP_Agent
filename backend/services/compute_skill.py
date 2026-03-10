@@ -37,7 +37,10 @@ def calculate_diminishing_returns(scores: list) -> float:
     return round(total, 2)
 
 
-def compute_user_vector(user_id: str, db: Session):
+# -----------------------------
+# PURE COMPUTATION FUNCTION
+# -----------------------------
+def calculate_skill_vector(user_id: str, db: Session):
 
     submissions = (
         db.query(DBSubmission, DBProblem)
@@ -101,11 +104,21 @@ def compute_user_vector(user_id: str, db: Session):
 
     sorted_skills = dict(sorted(final_skills.items(), key=lambda x: x[1], reverse=True))
 
+    return sorted_skills, solved_problem_count
+
+
+# -----------------------------
+# REAL USER WRAPPER
+# -----------------------------
+def compute_user_vector(user_id: str, db: Session):
+
+    skill_vector, solved_problem_count = calculate_skill_vector(user_id, db)
+
     db.query(DBUserSkill).filter(DBUserSkill.userId == user_id).delete()
 
     db_skills = []
 
-    for tag, score in sorted_skills.items():
+    for tag, score in skill_vector.items():
         db_skills.append(
             DBUserSkill(
                 userId=user_id,
@@ -122,7 +135,5 @@ def compute_user_vector(user_id: str, db: Session):
     return {
         "user_id": user_id,
         "total_unique_solved": solved_problem_count,
-        "skill_vector": sorted_skills
+        "skill_vector": skill_vector
     }
-
-##used all submissions, added attempt penalty,added recency weigjhing,, the tag are given equal weightage 
