@@ -30,13 +30,16 @@ def process_cf_submission(raw_data: dict, user_id: str) -> Tuple[DBSubmission, D
 
     # 2. Create DBSubmission object
     db_submission = DBSubmission(
-        submissionId=raw_data.get("id"),
-        userId=user_id,
-        problemId=p_id,
-        platform="codeforces",
-        verdict=raw_data.get("verdict", "UNKNOWN"),
-        submittedAt=datetime.fromtimestamp(raw_data.get("creationTimeSeconds"))
-    )
+    submissionId=raw_data.get("id"),
+    userId=user_id,
+    problemId=p_id,
+    platform="codeforces",
+
+    contestId=raw_data.get("contestId"),
+
+    verdict=raw_data.get("verdict", "UNKNOWN"),
+    submittedAt=datetime.fromtimestamp(raw_data.get("creationTimeSeconds"))
+)
     
     return db_submission, db_problem
 

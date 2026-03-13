@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime
-
+from services.topic_weights import initialize_user_topic_weights
 # Import Database setup
 from database import get_db
 
@@ -84,6 +84,7 @@ async def trigger_sync(user_id: str, handle: str, db: Session = Depends(get_db))
     """
     try:
         result = await sync_codeforces_data(handle, user_id, db)
+        initialize_user_topic_weights(user_id, db)
         return result
     except Exception as e:
         db.rollback()

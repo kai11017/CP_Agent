@@ -73,14 +73,18 @@ class DBUser(Base):
 # table for submission database
 class DBSubmission(Base):
     __tablename__ = "submissions"
+
     submissionId = Column(Integer, primary_key=True)
     userId = Column(String, index=True)
     problemId = Column(String)
     platform = Column(String)
+
+    contestId = Column(Integer, index=True)
+
     verdict = Column(String)
     submittedAt = Column(DateTime)
-
-# table for problem database solved by user
+    
+    # table for problem database solved by user
 class DBProblem(Base):
     __tablename__ = "problems"
     
@@ -155,3 +159,26 @@ class DBBenchmarkSample(Base):
 
     source = Column(String)  # "seed" or "user"
     createdAt = Column(DateTime, default=datetime.utcnow)
+
+
+    from sqlalchemy import Column, String, Float, DateTime, Integer, ForeignKey
+from datetime import datetime
+
+
+class DBUserTopicWeight(Base):
+    """
+    Stores learned topic weights for each user.
+    These weights adapt over time based on contest outcomes.
+    """
+
+    __tablename__ = "user_topic_weights"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    userId = Column(String, ForeignKey("users.userId"), index=True)
+
+    topic = Column(String, index=True)
+
+    weight = Column(Float, default=1.0)
+
+    lastUpdated = Column(DateTime, default=datetime.utcnow)
