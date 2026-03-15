@@ -14,7 +14,7 @@ def recompute_benchmarks(db: Session):
     # fetch all samples
     samples = db.query(DBBenchmarkSample).all()
 
-    bucket_topic_scores = defaultdict(list)
+    bucket_topic_scores = defaultdict(list) 
 
     for sample in samples:
         key = (sample.ratingBucket, sample.topic)
@@ -23,7 +23,7 @@ def recompute_benchmarks(db: Session):
     # clear old benchmark stats
     db.query(DBBenchmark).delete()
 
-    benchmark_rows = []
+    benchmark_rows = [] 
 
     for (bucket, topic), scores in bucket_topic_scores.items():
 

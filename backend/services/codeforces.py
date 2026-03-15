@@ -65,13 +65,23 @@ async def fetch_user_submissions(handle: str):
 
 
 async def fetch_user_contests(handle: str):
-    """Fetches rating changes and contest participation history."""
-    url = f"{CF_API_BASE}/user.rating?handle={handle}"
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        data = response.json()
-        
-        if data["status"] == "OK":
+    """Fetches rating changes and contest participation history with retries."""
+    url = f"{CF_API}/user.rating?handle={handle}"
+    retries = 3
+
+    for attempt in range(retries):
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url)
+            
+            data = response.json()
+            if data["status"] != "OK":
+                raise Exception("Codeforces API error")
             return data["result"]
-        else:
-            raise Exception(f"Codeforces API Error: {data.get('comment')}")
+            
+        except httpx.ReadTimeout:
+            print(f"Timeout fetching contests for {handle}, retrying ({attempt+1}/{retries})")
+            await asyncio.sleep(2)
+            
+    print(f"Failed fetching contests for {handle}")
+    return []

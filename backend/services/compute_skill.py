@@ -2,7 +2,7 @@ import math
 from collections import defaultdict
 from datetime import datetime
 from sqlalchemy.orm import Session
-from models import DBSubmission, DBProblem, DBUserSkill
+from models import DBSubmission, DBProblem, DBUserSkill, DBUserTopicWeight
 
 
 def calculate_problem_weight(rating: int) -> float:
@@ -13,7 +13,7 @@ def calculate_problem_weight(rating: int) -> float:
 
 def calculate_recency_weight(submitted_at):
     months = (datetime.utcnow() - submitted_at).days / 30
-    return math.exp(-0.05 * months)
+    return math.exp(-0.15 * months)
 
 
 def calculate_attempt_penalty(attempts: int) -> float:
@@ -102,7 +102,15 @@ def calculate_skill_vector(user_id: str, db: Session):
     for tag, scores in topic_scores.items():
         final_skills[tag] = calculate_diminishing_returns(scores)
 
-    sorted_skills = dict(sorted(final_skills.items(), key=lambda x: x[1], reverse=True))
+    user_weights = db.query(DBUserTopicWeight).filter(DBUserTopicWeight.userId == user_id).all()
+    weight_map = {w.topic: w.weight for w in user_weights}
+
+    sorted_skills = {}
+    for tag, score in final_skills.items():
+        multiplier = weight_map.get(tag, 1.0)
+        sorted_skills[tag] = score * multiplier
+
+    sorted_skills = dict(sorted(sorted_skills.items(), key=lambda x: x[1], reverse=True))
 
     return sorted_skills, solved_problem_count
 

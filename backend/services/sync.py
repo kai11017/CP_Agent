@@ -5,8 +5,8 @@ from typing import Tuple
 # Import your database models
 from models import DBSubmission, DBProblem, DBPlatformProfile
 # Import your fetcher
-from services.codeforces import fetch_user_submissions
-
+from services.codeforces import fetch_user_submissions, fetch_user_contests
+from services.topic_learning import recalculate_user_topic_weights
 
 def process_cf_submission(raw_data: dict, user_id: str) -> Tuple[DBSubmission, DBProblem]:
     """
@@ -98,6 +98,13 @@ async def sync_codeforces_data(handle: str, user_id: str, db: Session) -> dict:
         profile.lastSyncedAt = datetime.utcnow()
 
     db.commit() # Final commit
+
+    # 7. Fetch rating history and rebuild topic weights based on recent performance
+    try:
+        contests_data = await fetch_user_contests(handle)
+        recalculate_user_topic_weights(user_id, contests_data, db)
+    except Exception as e:
+        print(f"Failed to process contests: {str(e)}")
 
     return {
         "handle": handle,
