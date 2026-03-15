@@ -85,3 +85,25 @@ async def fetch_user_contests(handle: str):
             
     print(f"Failed fetching contests for {handle}")
     return []
+
+async def fetch_contest_info(contest_id: int):
+    """Fetches details about a specific contest including startTimeSeconds."""
+    url = f"{CF_API}/contest.standings?contestId={contest_id}&from=1&count=1"
+    retries = 3
+
+    for attempt in range(retries):
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url)
+            
+            data = response.json()
+            if data["status"] != "OK":
+                raise Exception("Codeforces API error")
+            return data["result"]["contest"]
+            
+        except httpx.ReadTimeout:
+            print(f"Timeout fetching info for contest {contest_id}, retrying ({attempt+1}/{retries})")
+            await asyncio.sleep(2)
+            
+    print(f"Failed fetching info for contest {contest_id}")
+    return None

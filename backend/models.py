@@ -84,6 +84,10 @@ class DBSubmission(Base):
     verdict = Column(String)
     submittedAt = Column(DateTime)
     
+    # New fields for Hybrid Coach
+    timeToSolve = Column(Integer, nullable=True) # Minutes from contest start to OK
+    wrongAttempts = Column(Integer, default=0)    # Count of non-OK verdicts before AC
+    
     # table for problem database solved by user
 class DBProblem(Base):
     __tablename__ = "problems"
@@ -110,7 +114,15 @@ class DBPlatformProfile(Base):
     currentRating = Column(Integer, default=0)
     maxRating = Column(Integer, default=0)
     lastSyncedAt = Column(DateTime, default=datetime.utcnow)
+
+# table for contests
+class DBContest(Base):
+    __tablename__ = "contests"
     
+    contestId = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    startTimeSeconds = Column(Integer)
+
 
 # for storing user skill vector and benchmark dataset
 from sqlalchemy import Float

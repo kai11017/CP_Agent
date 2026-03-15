@@ -3,9 +3,9 @@ from datetime import datetime
 from typing import Tuple
 
 # Import your database models
-from models import DBSubmission, DBProblem, DBPlatformProfile
+from models import DBSubmission, DBProblem, DBPlatformProfile, DBContest
 # Import your fetcher
-from services.codeforces import fetch_user_submissions, fetch_user_contests
+from services.codeforces import fetch_user_submissions, fetch_user_contests, fetch_contest_info
 from services.topic_learning import recalculate_user_topic_weights
 
 def process_cf_submission(raw_data: dict, user_id: str) -> Tuple[DBSubmission, DBProblem]:
@@ -61,9 +61,15 @@ async def sync_codeforces_data(handle: str, user_id: str, db: Session) -> dict:
   ##{} set coz set loookup is O(1) and lsit is O(n)
     new_submissions = []
     problems_to_upsert = {}
+    
+    # Track states for anomaly detection metrics
+    # problemId -> wrong attempts count
+    wrong_attempts_counter = {}
+    # contestId -> startTimeSeconds
+    contest_start_times = {}
 
-    # 3. Process the raw data
-    for raw_data in raw_submissions:
+    # 3. Process the raw data (Reverse to process chronologically for accurate WRONG_ANSWER counting)
+    for raw_data in reversed(raw_submissions):
         sub_id = raw_data.get("id")
         
         # If we already have this submission, skip it!
@@ -72,6 +78,46 @@ async def sync_codeforces_data(handle: str, user_id: str, db: Session) -> dict:
             
         # Convert JSON to DB objects
         db_sub, db_prob = process_cf_submission(raw_data, user_id)
+        
+        # Anomaly Metrics Calculation
+        p_id = db_prob.problemId
+        c_id = db_sub.contestId
+        
+        # Initialize counter if not exists
+        if p_id not in wrong_attempts_counter:
+            wrong_attempts_counter[p_id] = 0
+            
+        if db_sub.verdict == "OK":
+            db_sub.wrongAttempts = wrong_attempts_counter[p_id]
+            
+            # Calculate timeToSolve if it's a contest submission
+            if c_id:
+                if c_id not in contest_start_times:
+                    # Check DB first
+                    existing_contest = db.query(DBContest).filter(DBContest.contestId == c_id).first()
+                    if existing_contest:
+                        contest_start_times[c_id] = existing_contest.startTimeSeconds
+                    else:
+                        # Fetch from API
+                        c_info = await fetch_contest_info(c_id)
+                        if c_info and "startTimeSeconds" in c_info:
+                            new_contest = DBContest(
+                                contestId=c_id,
+                                name=c_info.get("name", f"Contest {c_id}"),
+                                startTimeSeconds=c_info.get("startTimeSeconds")
+                            )
+                            db.merge(new_contest)
+                            db.commit()
+                            contest_start_times[c_id] = c_info.get("startTimeSeconds")
+                
+                # Assign timeToSolve in minutes
+                start_time = contest_start_times.get(c_id)
+                if start_time:
+                    solve_time_seconds = raw_data.get("creationTimeSeconds", 0) - start_time
+                    db_sub.timeToSolve = max(0, solve_time_seconds // 60)
+        else:
+            # Increment wrong attempts for future OK verdict
+            wrong_attempts_counter[p_id] += 1
         
         new_submissions.append(db_sub)
         
