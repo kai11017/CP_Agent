@@ -57,7 +57,7 @@ class AddPlatformRequest(BaseModel): # client sends this to add a platform
 
 # section for creating a database schema
 # as pydantic is use for data validation and sqlalchemy is use for database schema
-from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from database import Base
@@ -80,6 +80,9 @@ class DBSubmission(Base):
     platform = Column(String)
 
     contestId = Column(Integer, index=True)
+
+    # "CONTESTANT", "OUT_OF_COMPETITION", "PRACTICE", "VIRTUAL"
+    participantType = Column(String, default="PRACTICE")
 
     verdict = Column(String)
     submittedAt = Column(DateTime)
@@ -182,3 +185,45 @@ class DBUserTopicWeight(Base):
     weight = Column(Float, default=1.0)
 
     lastUpdated = Column(DateTime, default=datetime.utcnow)
+
+
+class DBUserContest(Base):
+    """
+    Stores per-contest participation data for a user.
+    One row per contest the user participated in.
+    """
+    __tablename__ = "user_contests"
+    __table_args__ = (
+        UniqueConstraint("userId", "contestId", name="uq_user_contest"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    userId = Column(String, ForeignKey("users.userId"), index=True)
+    contestId = Column(Integer, index=True)
+    contestName = Column(String)
+    ratingBefore = Column(Integer, default=0)
+    ratingAfter = Column(Integer, default=0)
+    ratingChange = Column(Integer, default=0)
+    problemsSolved = Column(Integer, default=0)
+    problemsAttempted = Column(Integer, default=0)
+    review = Column(String, nullable=True)  # user's post-contest notes (future NLP)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+
+
+class DBUserContestProblem(Base):
+    """
+    Stores per-problem detail within a contest.
+    Tracks solve status, attempts, time-to-solve, and tags.
+    """
+    __tablename__ = "user_contest_problems"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    userContestId = Column(Integer, ForeignKey("user_contests.id"), index=True)
+    userId = Column(String, index=True)
+    contestId = Column(Integer, index=True)
+    problemId = Column(String)
+    solved = Column(Integer, default=0)  # 1 = solved, 0 = not solved
+    attempts = Column(Integer, default=0)
+    timeToSolve = Column(Integer, nullable=True)  # seconds from contest start to first AC
+    problemRating = Column(Integer, default=0)
+    tags = Column(JSON, default=list)

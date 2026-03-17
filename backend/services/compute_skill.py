@@ -137,3 +137,78 @@ def compute_user_vector(user_id: str, db: Session):
         "total_unique_solved": solved_problem_count,
         "skill_vector": skill_vector
     }
+
+
+# -----------------------------
+# CONTEST-ONLY SKILL VECTOR
+# -----------------------------
+def compute_contest_skill_vector(user_id: str, db: Session):
+    """
+    Same algorithm as calculate_skill_vector but ONLY for contest submissions.
+    Filters to participantType IN ('CONTESTANT', 'OUT_OF_COMPETITION').
+    Returns skill vector representing performance under contest pressure.
+    """
+    submissions = (
+        db.query(DBSubmission, DBProblem)
+        .join(DBProblem, DBSubmission.problemId == DBProblem.problemId)
+        .filter(DBSubmission.userId == user_id)
+        .filter(DBSubmission.participantType.in_(["CONTESTANT", "OUT_OF_COMPETITION"]))
+        .order_by(DBSubmission.submittedAt)
+        .all()
+    )
+
+    problem_attempts = defaultdict(list)
+
+    for sub, prob in submissions:
+        problem_attempts[prob.problemId].append((sub, prob))
+
+    topic_scores = defaultdict(list)
+    solved_count = 0
+
+    for problem_id, attempts_list in problem_attempts.items():
+
+        attempts = 0
+        first_ac_found = False
+        attempts_until_ac = None
+        latest_ac_time = None
+        prob = None
+
+        for sub, p in attempts_list:
+            attempts += 1
+            prob = p
+
+            if sub.verdict == "OK":
+                if not first_ac_found:
+                    attempts_until_ac = attempts
+                    first_ac_found = True
+                latest_ac_time = sub.submittedAt
+
+        if not first_ac_found:
+            continue
+
+        solved_count += 1
+
+        difficulty_weight = calculate_problem_weight(prob.rating)
+        recency_weight = calculate_recency_weight(latest_ac_time)
+        attempt_penalty = calculate_attempt_penalty(attempts_until_ac)
+
+        problem_score = difficulty_weight * recency_weight * attempt_penalty
+
+        tags = prob.tags if prob.tags else ["general"]
+        score_per_tag = problem_score / len(tags)
+
+        for tag in tags:
+            topic_scores[tag].append(score_per_tag)
+
+    final_skills = {}
+    for tag, scores in topic_scores.items():
+        final_skills[tag] = calculate_diminishing_returns(scores)
+
+    sorted_skills = dict(sorted(final_skills.items(), key=lambda x: x[1], reverse=True))
+
+    return {
+        "user_id": user_id,
+        "type": "contest_only",
+        "total_contest_solved": solved_count,
+        "skill_vector": sorted_skills
+    }

@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
-from models import DBUserSkill, DBBenchmark, DBPlatformProfile
+from models import DBUserSkill, DBBenchmark, DBPlatformProfile, DBUserContestProblem, DBUserTopicWeight
+from collections import defaultdict
 
 def get_performance_report(user_id: str, db: Session):
     # 1. Get the user's handle for the report
@@ -18,7 +19,6 @@ def get_performance_report(user_id: str, db: Session):
     for bench in benchmarks:
         user_score = user_map.get(bench.topic, 0)
         # Calculate the % of the elite level the user has reached
-        # If Tourist has 5000 and you have 500, you are at 10% of elite capacity.
         coverage_pct = (user_score / bench.avgScore * 100) if bench.avgScore > 0 else 0
         
         report.append({
@@ -37,4 +37,79 @@ def get_performance_report(user_id: str, db: Session):
         "rating": profile.currentRating,
         "comparison_group": "Grandmasters/Masters",
         "analysis": report[:10] # Top 10 topics to focus on
+    }
+
+
+def get_topic_weakness_report(user_id: str, db: Session):
+    """
+    Returns topics sorted by weakness (worst first) using contest data.
+    Combines: skill scores, benchmark gaps, contest solve rates,
+    difficulty ceilings, and learned topic weights.
+    """
+    profile = db.query(DBPlatformProfile).filter(DBPlatformProfile.userId == user_id).first()
+    if not profile:
+        return {"error": "Profile not found"}
+
+    # 1. Get user skills
+    user_skills = {s.topic: s.score for s in db.query(DBUserSkill).filter(DBUserSkill.userId == user_id).all()}
+
+    # 2. Get benchmarks
+    rating = profile.currentRating if profile.currentRating else 1200
+    bucket = f"{(rating // 200) * 200}-{(rating // 200) * 200 + 199}"
+    benchmarks = {b.topic: b.avgScore for b in db.query(DBBenchmark).filter(DBBenchmark.ratingBucket == bucket).all()}
+
+    # 3. Get topic weights
+    topic_weights = {w.topic: w.weight for w in db.query(DBUserTopicWeight).filter(DBUserTopicWeight.userId == user_id).all()}
+
+    # 4. Compute contest performance per topic
+    contest_problems = db.query(DBUserContestProblem).filter(DBUserContestProblem.userId == user_id).all()
+
+    topic_contest_stats = defaultdict(lambda: {"solved": 0, "attempted": 0, "max_rating_solved": 0})
+
+    for cp in contest_problems:
+        tags = cp.tags if cp.tags else ["general"]
+        for tag in tags:
+            stats = topic_contest_stats[tag]
+            stats["attempted"] += 1
+            if cp.solved:
+                stats["solved"] += 1
+                if cp.problemRating and cp.problemRating > stats["max_rating_solved"]:
+                    stats["max_rating_solved"] = cp.problemRating
+
+    # 5. Build weakness report
+    all_topics = set(list(user_skills.keys()) + list(benchmarks.keys()) + list(topic_contest_stats.keys()))
+
+    report = []
+    for topic in all_topics:
+        user_score = user_skills.get(topic, 0)
+        bench_score = benchmarks.get(topic, 0)
+        weight = topic_weights.get(topic, 1.0)
+        contest_stats = topic_contest_stats.get(topic, {"solved": 0, "attempted": 0, "max_rating_solved": 0})
+
+        gap = bench_score - user_score
+        solve_rate = (contest_stats["solved"] / contest_stats["attempted"] * 100) if contest_stats["attempted"] > 0 else 0
+
+        # Priority score: higher = weaker (needs more practice)
+        priority = gap * weight
+
+        report.append({
+            "topic": topic,
+            "your_score": round(user_score, 2),
+            "benchmark_avg": round(bench_score, 2),
+            "gap": round(gap, 2),
+            "weight": round(weight, 2),
+            "priority": round(priority, 2),
+            "contest_solve_rate": f"{round(solve_rate, 1)}%",
+            "contest_attempted": contest_stats["attempted"],
+            "difficulty_ceiling": contest_stats["max_rating_solved"]
+        })
+
+    # Sort by priority (highest priority = weakest topic first)
+    report.sort(key=lambda x: x['priority'], reverse=True)
+
+    return {
+        "handle": profile.handle,
+        "rating": profile.currentRating,
+        "bucket": bucket,
+        "weaknesses": report
     }
