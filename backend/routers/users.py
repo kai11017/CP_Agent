@@ -14,7 +14,7 @@ from models import DBUser, DBPlatformProfile, DBUserContest, DBUserContestProble
 from services.codeforces import fetch_user_info, fetch_user_submissions
 from services.sync import sync_codeforces_data, sync_contest_history
 from services.compute_skill import compute_user_vector, compute_contest_skill_vector
-from services.analytics import compare_user_to_benchmark
+from services.analytics import get_user_topic_dashboard
 from services.gap_analysis import get_performance_report, get_topic_weakness_report
 from services.recommendations import get_problem_recommendations
 from services.topic_learning import update_topic_weights_after_contest
@@ -134,8 +134,7 @@ def evaluate_user(user_id: str, db: Session = Depends(get_db)):
     """
     The 'Truth' endpoint. Compares user to their peers and returns insights.
     """
-    return compare_user_to_benchmark(user_id, db)
-
+    return get_user_topic_dashboard(user_id, db)
 
 # 7) get user performance report
 @router.get("/users/{user_id}/report")

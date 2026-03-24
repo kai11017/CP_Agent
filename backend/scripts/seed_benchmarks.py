@@ -7,7 +7,7 @@ from database import SessionLocal
 from models import DBBenchmarkSample, DBPlatformProfile
 from services.sync import sync_codeforces_data
 from services.compute_skill import calculate_skill_vector
-
+from services.benchmarks import recompute_benchmarks
 
 SEED_FOLDER = "benchmark_seed"
 
@@ -94,10 +94,10 @@ async def main():
         for handle in handles:
             await process_handle(handle, bucket, db)
 
-    db.close()
+    #
+        db.close()
 
-    print("\nBenchmark seed completed")
-
+print("\nBenchmark seed completed")
 
 if __name__ == "__main__":
     asyncio.run(main())

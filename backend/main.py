@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from routers.users import router as users_router
 from database import engine, Base
-
+from models import *
 app = FastAPI()
 
 @app.get("/")

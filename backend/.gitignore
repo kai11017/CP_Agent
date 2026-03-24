@@ -6,7 +6,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# # C extensions
+# # C extensions 
 # *.so
 
 # # Distribution / packaging
@@ -173,3 +173,8 @@ venv.bak/
 # # Windows generated files
 # ehthumbs.db
 # Thumbs.db
+
+
+
+venv/
+.env

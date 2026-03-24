@@ -92,8 +92,8 @@ async def sync_codeforces_data(handle: str, user_id: str, db: Session) -> dict:
 
     # 5. Save New Submissions to Database
     # Duplicates already filtered above, so add_all() is safe and faster than merge()
-    db.add_all(new_submissions)
-
+    for sub in new_submissions:
+        db.merge(sub)
     # 6. Update the "lastSyncedAt" timestamp on the user's profile
     profile = db.query(DBPlatformProfile).filter(DBPlatformProfile.handle == handle).first()
     if profile:
