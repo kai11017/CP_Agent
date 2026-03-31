@@ -5,6 +5,51 @@ from models import DBProblem, DBSubmission, DBPlatformProfile
 from services.gap_analysis import get_topic_weakness_report
 from services.ai_coach import generate_ai_feedback
 
+KNOWLEDGE_GRAPH = {
+    "dp": ["greedy", "math"],
+    "graphs": ["dfs and similar", "data structures"],
+    "trees": ["dfs and similar"],
+    "dfs and similar": ["implementation"],
+    "number theory": ["math"],
+    "combinatorics": ["math"],
+    "geometry": ["math"],
+    "binary search": ["sortings"],
+    "two pointers": ["sortings"],
+    "bitmasks": ["math", "implementation"],
+    "shortest paths": ["graphs"],
+    "dsu": ["graphs", "trees"],
+    "divide and conquer": ["binary search"],
+    "graph matchings": ["graphs"],
+    "string suffix structures": ["strings"],
+    "hashing": ["strings"],
+    "matrices": ["math"],
+    "fft": ["math"],
+    "meet-in-the-middle": ["binary search", "brute force"],
+    "ternary search": ["binary search"]
+}
+
+def get_root_weak_topic(topic, weakness_map, visited=None):
+    if visited is None:
+        visited = set()
+        
+    if topic in visited:
+        return topic # Prevent infinite loops
+    visited.add(topic)
+    
+    prereqs = KNOWLEDGE_GRAPH.get(topic, [])
+    
+    # Check if user lacks a strong hold on any prerequisite
+    for prereq in prereqs:
+        prereq_data = weakness_map.get(prereq)
+        if prereq_data:
+            # If gap > 0, score < average, so NO strong hold
+            if prereq_data["gap"] > 0:
+                # Recursively resolve this weaker prerequisite
+                return get_root_weak_topic(prereq, weakness_map, visited)
+                
+    # Topics with all strong hold prerequisites (or no prerequisites) are returned
+    return topic
+
 def get_problem_recommendations(user_id: str, db: Session):
 
     # 1. Get profile
@@ -23,8 +68,37 @@ def get_problem_recommendations(user_id: str, db: Session):
     if "weaknesses" not in weakness_data:
         return {"error": "Could not compute weaknesses"}
 
-    # 🔥 pick top 5 weak topics
-    weak_topics = weakness_data["weaknesses"][:5]
+    # Create weakness_map for O(1) lookups
+    weakness_map = {w["topic"]: w for w in weakness_data["weaknesses"]}
+
+    # 🔥 Resolve foundational topics using the Knowledge Graph
+    resolved_topics = []
+    seen = set()
+
+    # Traverse using the original prioritized weakness list
+    for topic_data in weakness_data["weaknesses"]:
+        if topic_data["gap"] <= 0:
+            continue # Skip topics where gap is already <= 0 (strong hold)
+
+        root_topic = get_root_weak_topic(topic_data["topic"], weakness_map)
+        
+        # Don't add duplicate foundational topics
+        if root_topic not in seen:
+            seen.add(root_topic)
+            # Find the actual data for this foundational topic
+            root_data = weakness_map.get(root_topic)
+            if root_data:
+                resolved_topics.append(root_data)
+                
+        # Stop once we have 5 unique topics
+        if len(resolved_topics) == 5:
+            break
+
+    # If the user has a strong hold on almost everything, fallback to normal weaknesses
+    if not resolved_topics:
+        resolved_topics = weakness_data["weaknesses"][:5]
+
+    weak_topics = resolved_topics
 
     # 3. Get solved problems
     solved_records = db.query(DBSubmission.problemId).filter(
